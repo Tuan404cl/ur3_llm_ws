@@ -1,0 +1,112 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="ur3_gripper">
+  
+  <!-- Import thư viện UR3 và Robotiq -->
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+  <xacro:include filename="$(find robotiq_description)/urdf/robotiq_2f_85_macro.urdf.xacro"/>
+
+  <!-- Khai báo link gốc của thế giới -->
+  <link name="world"/>
+
+  <!-- Khởi tạo tay máy UR3 (đã loại bỏ sim_gazebo) -->
+  <xacro:ur_robot
+    name="ur3"
+    tf_prefix=""
+    parent="world"
+    joint_limits_parameters_file="$(find ur_description)/config/ur3/joint_limits.yaml"
+    kinematics_parameters_file="$(find ur_description)/config/ur3/default_kinematics.yaml"
+    physical_parameters_file="$(find ur_description)/config/ur3/physical_parameters.yaml"
+    visual_parameters_file="$(find ur_description)/config/ur3/visual_parameters.yaml">
+    <origin xyz="0 0 0.8" rpy="0 0 0"/>
+  </xacro:ur_robot>
+
+  <!-- Khởi tạo kẹp Robotiq và gắn vào tool0 của UR3 -->
+  <!-- 
+    Pose mount: chọc kẹp thẳng DỌC Xuống
+    - rpy="-1.5708 0 0" = lật 90° quanh X (Z+ tool0 -> Z- world = chỉ xuống)
+    - xyz="0 0 0" = gắn ngay tại tool0
+  -->
+  <xacro:robotiq_gripper
+    name="RobotiqGripper"
+    prefix=""
+    parent="tool0"
+    include_ros2_control="false">
+    <origin xyz="0 0 0" rpy="0 0 1.5708"/>
+  </xacro:robotiq_gripper>
+
+  <!-- Khai báo phần cứng điều khiển Gazebo cho cả tay máy và kẹp -->
+  <ros2_control name="GazeboSystem" type="system">
+    <hardware>
+      <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+    </hardware>
+    <joint name="shoulder_pan_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="shoulder_lift_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">-1.57</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="elbow_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">1.57</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="wrist_1_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">-1.57</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="wrist_2_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">-1.57</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="wrist_3_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="robotiq_85_left_knuckle_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <!-- 5 joints mimic phải có trong ros2_control để Gazebo điều khiển được -->
+    <joint name="robotiq_85_right_knuckle_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="robotiq_85_left_inner_knuckle_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="robotiq_85_right_inner_knuckle_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="robotiq_85_left_finger_tip_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="robotiq_85_right_finger_tip_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+  <!-- Load Plugin kết nối Gazebo với ROS 2 Controllers -->
+  <gazebo>
+    <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+      <parameters>$(find ur3_llm_tamp)/config/controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+  
+</robot>

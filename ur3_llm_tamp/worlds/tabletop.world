@@ -1,0 +1,42 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="default">
+    <!-- Ánh sáng và Mặt đất -->
+    <include><uri>model://sun</uri></include>
+    <include><uri>model://ground_plane</uri></include>
+
+    <!-- Bàn thao tác -->
+    <model name="table">
+      <static>true</static>
+      <pose>0.4 0 0 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>0.8 1.0 0.8</size></box></geometry>
+          <material><ambient>0.8 0.6 0.4 1</ambient></material>
+        </visual>
+        <collision name="collision">
+          <geometry><box><size>0.8 1.0 0.8</size></box></geometry>
+        </collision>
+      </link>
+    </model>
+
+    <!-- World Camera (Nhận diện vật thể) -->
+    <model name="overhead_camera">
+      <static>true</static>
+      <pose>0.4 0 2.0 0 1.5708 0</pose> <!-- Treo cao 2m, cúi xuống 90 độ -->
+      <link name="link">
+        <sensor name="camera1" type="camera">
+          <camera>
+            <horizontal_fov>1.047</horizontal_fov>
+            <image><width>640</width><height>480</height></image>
+          </camera>
+          <plugin name="camera_controller" filename="libgazebo_ros_camera.so">
+            <ros><remapping>~/image_raw:=/overhead_camera/image_raw</remapping></ros>
+            <camera_name>overhead_camera</camera_name>
+            <frame_name>camera_link</frame_name>
+          </plugin>
+        </sensor>
+      </link>
+    </model>
+  </world>
+</sdf>
