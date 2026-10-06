@@ -1,76 +1,146 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CameraInfo
+from std_msgs.msg import String
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
 import json
+import math
+import yaml
+import os
+from ament_index_python.packages import get_package_share_directory
+
+from ur3_llm_tamp.world_model import SceneState, ObjectState, ZoneState, load_scene_config
 
 class PerceptionNode(Node):
     def __init__(self):
         super().__init__('perception_node')
         self.bridge = CvBridge()
 
-        # Subscribe ảnh từ camera overhead
-        self.sub = self.create_subscription(Image, '/camera/image_raw', self.image_callback, 10)
+        # Load scene configuration
+        pkg_path = get_package_share_directory('ur3_llm_tamp')
+        cfg_path = os.path.join(pkg_path, 'config', 'scene.yaml')
+        self.cfg = load_scene_config(cfg_path)
 
-        # Tọa độ cố định của 3 Zone (do mặt bàn được spawn cứng)
-        self.zones = {
-            'zone_a': (0.35, -0.20),
-            'zone_b': (0.35, 0.00),
-            'zone_c': (0.35, 0.20)
-        }
+        self.table_z = self.cfg['table']['z']
+        self.cube_half_z = self.cfg['cube_size'] / 2.0
+        self.cube_z = self.table_z + self.cube_half_z
+        self.cam_pos = np.array(self.cfg['camera']['position']) # [0.30, 0.0, 1.60]
+        self.delta_z = self.cam_pos[2] - self.cube_z # 1.60 - 0.82 = 0.78m
 
-        # Định nghĩa khoảng màu HSV cho 5 khối
-        self.color_ranges = {
-            'red_cube': {'lower': np.array([0, 150, 100]), 'upper': np.array([10, 255, 255])},
-            'yellow_cube': {'lower': np.array([25, 150, 100]), 'upper': np.array([35, 255, 255])},
-            'green_cube': {'lower': np.array([45, 150, 100]), 'upper': np.array([75, 255, 255])},
-            'blue_cube': {'lower': np.array([100, 150, 100]), 'upper': np.array([130, 255, 255])},
-            'purple_cube': {'lower': np.array([140, 100, 100]), 'upper': np.array([160, 255, 255])}
-        }
+        self.zone_occupancy_radius = self.cfg['zone_occupancy_radius']
 
-        self.get_logger().info("Perception Node Started - Waiting for camera...")
+        # Camera intrinsics (default or updated via /camera/camera_info)
+        # horizontal fov 1.047 rad (60 deg), 800x800 -> fx = fy = (800/2) / tan(1.047/2) ~= 692.8
+        self.fx = 692.8
+        self.fy = 692.8
+        self.cx = 400.0
+        self.cy = 400.0
 
-    def image_callback(self, msg):
-        cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        self.color_ranges = {}
+        for name, intervals in self.cfg['colors'].items():
+            parsed_intervals = []
+            for low, high in intervals:
+                parsed_intervals.append((np.array(low, dtype=np.uint8), np.array(high, dtype=np.uint8)))
+            self.color_ranges[name] = parsed_intervals
+
+        self.min_blob_area = self.cfg.get('min_blob_area_px', 150)
+
+        # Nominal zones
+        self.nominal_zones = self.cfg['zones'] # name -> {x: .., y: ..}
+
+        # Subscribers & Publisher
+        self.sub_info = self.create_subscription(
+            CameraInfo, self.cfg['camera']['info_topic'], self.info_callback, 10)
+        self.sub_img = self.create_subscription(
+            Image, self.cfg['camera']['image_topic'], self.image_callback, 10)
+
+        self.pub_scene = self.create_publisher(String, '/scene_state', 10)
+
+        self.current_scene = SceneState()
+        # Initialize zones
+        for zname, zinfo in self.nominal_zones.items():
+            self.current_scene.zones[zname] = ZoneState(
+                name=zname, x=float(zinfo['x']), y=float(zinfo['y']), detected=True, occupant=None)
+
+        self.get_logger().info("Perception Node initialized, listening to camera...")
+
+    def info_callback(self, msg: CameraInfo):
+        if msg.k[0] > 0:
+            self.fx = msg.k[0]
+            self.fy = msg.k[4]
+            self.cx = msg.k[2]
+            self.cy = msg.k[5]
+
+    def pixel_to_world(self, u: float, v: float, z_target: float) -> tuple:
+        """
+        Overhead camera mounted at [cam_x, cam_y, cam_z] looking straight down (pitch = +90 deg).
+        Camera optical frame:
+          u (image X -> right): aligns with Gazebo -Y axis
+          v (image Y -> down):  aligns with Gazebo -X axis
+        """
+        dz = self.cam_pos[2] - z_target
+        # In optical frame:
+        # x_c = (u - cx) * dz / fx
+        # y_c = (v - cy) * dz / fy
+        # Mapping to world frame:
+        world_x = self.cam_pos[0] - (v - self.cy) * dz / self.fy
+        world_y = self.cam_pos[1] - (u - self.cx) * dz / self.fx
+        return float(world_x), float(world_y)
+
+    def image_callback(self, msg: Image):
+        try:
+            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as e:
+            self.get_logger().error(f"cv_bridge conversion error: {e}")
+            return
+
         hsv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
 
-        state_dict = {}
-        # Kiểm tra xem zone nào đang có vật
-        zone_status = {z: 'empty' for z in self.zones}
+        new_objects = {}
 
-        for name, ranges in self.color_ranges.items():
-            mask = cv2.inRange(hsv_image, ranges['lower'], ranges['upper'])
+        for cube_name, intervals in self.color_ranges.items():
+            mask = None
+            for lower, upper in intervals:
+                m = cv2.inRange(hsv_image, lower, upper)
+                mask = m if mask is None else cv2.bitwise_or(mask, m)
+
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
             if contours:
-                # Lấy khối to nhất (tránh nhiễu)
                 c = max(contours, key=cv2.contourArea)
-                if cv2.contourArea(c) > 100:
+                if cv2.contourArea(c) >= self.min_blob_area:
                     M = cv2.moments(c)
                     if M["m00"] != 0:
-                        cx = int(M["m10"] / M["m00"])
-                        cy = int(M["m01"] / M["m00"])
+                        u = float(M["m10"] / M["m00"])
+                        v = float(M["m01"] / M["m00"])
+                        wx, wy = self.pixel_to_world(u, v, self.cube_z)
 
-                        # Chuyển đổi Pixel sang mét (Dựa vào thông số camera z=2.0, fov, resolution)
-                        # (Đã calibrate sẵn cho mô hình bài này)
-                        real_x = 0.4 - (cy - 400) * 0.00288
-                        real_y = 0.0 - (cx - 400) * 0.00288
+                        # Minimum area rect for yaw orientation
+                        rect = cv2.minAreaRect(c)
+                        # rect[2] is angle in degrees
+                        angle_deg = rect[2]
+                        yaw = math.radians(angle_deg)
 
-                        state_dict[name] = [round(real_x, 3), round(real_y, 3)]
+                        new_objects[cube_name] = ObjectState(
+                            name=cube_name,
+                            x=round(wx, 4),
+                            y=round(wy, 4),
+                            z=round(self.cube_z, 4),
+                            yaw=round(yaw, 3),
+                            zone=None
+                        )
 
-                        # Kiểm tra xem khối này có nằm trong zone nào không (bán kính < 0.05m)
-                        for z_name, z_pos in self.zones.items():
-                            dist = np.sqrt((real_x - z_pos[0])**2 + (real_y - z_pos[1])**2)
-                            if dist < 0.05:
-                                zone_status[z_name] = name
+        # Update scene
+        self.current_scene.objects = new_objects
+        self.current_scene.stamp = self.get_clock().now().nanoseconds / 1e9
+        self.current_scene.recompute_occupancy(self.zone_occupancy_radius)
 
-        # Xuất log để kiểm tra
-        self.get_logger().info(f"Blocks: {state_dict}")
-        self.get_logger().info(f"Zones: {zone_status}")
-        self.get_logger().info("-" * 40)
+        # Publish SceneState JSON
+        msg_out = String()
+        msg_out.data = self.current_scene.to_json()
+        self.pub_scene.publish(msg_out)
 
 def main(args=None):
     rclpy.init(args=args)

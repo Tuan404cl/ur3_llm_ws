@@ -1,0 +1,59 @@
+# =============================================================================
+# Static scene description (KHÔNG chứa vị trí các block!)
+# - Vị trí block luôn được lấy từ camera (perception_node).
+# - Ở đây chỉ mô tả các thứ cố định: bàn, camera, bố cục danh nghĩa của zone,
+#   ngưỡng màu, giới hạn workspace của robot.
+# Mọi toạ độ ở frame "world" (Gazebo). Robot base_link đặt tại (0, 0, 0.8).
+# =============================================================================
+table:
+  x_min: 0.00
+  x_max: 0.80
+  y_min: -0.50
+  y_max: 0.50
+  z: 0.80            # mặt bàn
+
+robot_base: [0.0, 0.0, 0.80]
+
+cube_size: 0.04
+
+# Bố cục DANH NGHĨA của zone (tên + vị trí gần đúng). Camera sẽ phát hiện các
+# tấm zone màu trắng và tinh chỉnh tâm thực tế; tên được gán theo zone danh
+# nghĩa gần nhất.
+zones:
+  zone_a: {x: 0.30, y: -0.18}
+  zone_b: {x: 0.30, y: 0.00}
+  zone_c: {x: 0.30, y: 0.18}
+zone_size: 0.09
+zone_occupancy_radius: 0.07   # block có tâm cách tâm zone < r  => zone bị chiếm
+
+# Camera overhead nhìn thẳng xuống (extrinsics đã biết, intrinsics lấy từ
+# /camera/camera_info). Hướng ảnh: u tăng -> world -Y, v tăng -> world -X.
+camera:
+  position: [0.30, 0.0, 1.60]
+  image_topic: /camera/image_raw
+  info_topic: /camera/camera_info
+
+# Ngưỡng HSV (OpenCV: H 0..179)
+colors:
+  red_cube:    [[[0, 120, 70], [8, 255, 255]], [[172, 120, 70], [179, 255, 255]]]
+  yellow_cube: [[[22, 120, 70], [35, 255, 255]]]
+  green_cube:  [[[45, 120, 70], [80, 255, 255]]]
+  blue_cube:   [[[105, 120, 70], [130, 255, 255]]]
+  purple_cube: [[[135, 100, 50], [165, 255, 255]]]
+min_blob_area_px: 150
+
+# Vùng làm việc an toàn của gripper (top-down) tính từ robot base, frame world.
+workspace:
+  r_min: 0.18
+  r_max: 0.40
+  x_min: 0.12
+  y_min: -0.30
+  y_max: 0.30
+
+# Tham số tìm vị trí trống (find_free_position)
+free_space:
+  grid_step: 0.03
+  clearance_objects: 0.075   # khoảng cách tối thiểu tới block khác
+  clearance_zones: 0.085     # khoảng cách tối thiểu tới tâm zone (không đặt tạm vào zone)
+  margin_table: 0.05
+

@@ -1,0 +1,9 @@
+# Kịch bản phụ: cả 3 zone đều bị chiếm -> robot phải dọn vật ra vị trí tạm
+# do find_free_position() xác định từ ảnh camera.
+# Tất cả các khối được đặt thẳng hàng (yaw = 0.0), khoảng cách an toàn >= 10cm.
+objects:
+  blue_cube:   [0.30, 0.00, 0.0]    # zone_b
+  yellow_cube: [0.30, -0.18, 0.0]   # zone_a
+  green_cube:  [0.30, 0.18, 0.0]    # zone_c
+  red_cube:    [0.22, 0.11, 0.0]    # trên bàn (yaw = 0.0)
+  purple_cube: [0.22, -0.11, 0.0]   # trên bàn (yaw = 0.0)

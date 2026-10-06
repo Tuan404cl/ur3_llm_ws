@@ -1,10 +1,13 @@
 <?xml version="1.0" ?>
+<!-- blue_cube: 4 cm cube, 50 g. Contact params tuned so the Robotiq 2F-85
+     can hold it purely by friction (no pose teleport / no attach plugin). -->
 <sdf version="1.6">
   <model name="blue_cube">
     <link name="link">
       <inertial>
-        <mass>0.1</mass>
-        <inertia><ixx>0.001</ixx><iyy>0.001</iyy><izz>0.001</izz></inertia>
+        <mass>0.005</mass>
+        <inertia><ixx>1.33e-6</ixx><iyy>1.33e-6</iyy><izz>1.33e-6</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
       </inertial>
       <visual name="visual">
         <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
@@ -12,7 +15,12 @@
       </visual>
       <collision name="collision">
         <geometry><box><size>0.04 0.04 0.04</size></box></geometry>
-        <surface><friction><ode><mu>2.0</mu><mu2>2.0</mu2></ode></friction></surface>
+        <surface>
+          <friction><ode><mu>100.0</mu><mu2>100.0</mu2></ode></friction>
+          <contact><ode>
+            <kp>1e5</kp><kd>10</kd><max_vel>0.0</max_vel><min_depth>0.005</min_depth>
+          </ode></contact>
+        </surface>
       </collision>
     </link>
   </model>

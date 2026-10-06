@@ -13,6 +13,7 @@
     name="ur3"
     tf_prefix=""
     parent="world"
+    generate_ros2_control_tag="false"
     joint_limits_parameters_file="$(find ur_description)/config/ur3/joint_limits.yaml"
     kinematics_parameters_file="$(find ur_description)/config/ur3/default_kinematics.yaml"
     physical_parameters_file="$(find ur_description)/config/ur3/physical_parameters.yaml"
@@ -33,6 +34,32 @@
     include_ros2_control="false">
     <origin xyz="0 0 0" rpy="0 0 1.5708"/>
   </xacro:robotiq_gripper>
+
+  <!-- Plugin GazeboGraspFix chuyên dụng cho kẹp 2 ngón Robotiq -->
+  <gazebo>
+    <plugin name="gazebo_grasp_fix" filename="libgazebo_grasp_fix.so">
+      <arm>
+        <arm_name>ur3_gripper</arm_name>
+        <palm_link>wrist_3_link</palm_link>
+        <gripper_link>robotiq_85_left_finger_tip_link</gripper_link>
+        <gripper_link>robotiq_85_right_finger_tip_link</gripper_link>
+        <gripper_link>robotiq_85_left_finger_link</gripper_link>
+        <gripper_link>robotiq_85_right_finger_link</gripper_link>
+        <gripper_link>robotiq_85_left_inner_knuckle_link</gripper_link>
+        <gripper_link>robotiq_85_right_inner_knuckle_link</gripper_link>
+      </arm>
+      <forces_angle_tolerance>100</forces_angle_tolerance>
+      <update_rate>50</update_rate>
+      <grip_count_threshold>2</grip_count_threshold>
+      <max_grip_count>8</max_grip_count>
+      <release_tolerance>0.005</release_tolerance>
+      <disable_collisions_on_attach>false</disable_collisions_on_attach>
+      <contact_topic>__default_topic__</contact_topic>
+    </plugin>
+  </gazebo>
+
+
+
 
   <!-- Khai báo phần cứng điều khiển Gazebo cho cả tay máy và kẹp -->
   <ros2_control name="GazeboSystem" type="system">
@@ -74,32 +101,23 @@
       <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
-    <!-- 5 joints mimic phải có trong ros2_control để Gazebo điều khiển được -->
-    <joint name="robotiq_85_right_knuckle_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="robotiq_85_left_inner_knuckle_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="robotiq_85_right_inner_knuckle_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="robotiq_85_left_finger_tip_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="robotiq_85_right_finger_tip_joint">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
+    <!-- 5 joints mimic: gazebo_ros2_control (Humble) chỉ nhận mimic qua param
+         "mimic"/"multiplier" trong khối ros2_control (KHÔNG đọc thẻ <mimic> của URDF).
+         Thiếu các param này thì chỉ ngón trái đóng -> không thể kẹp vật thật. -->
+    <xacro:macro name="mimic_joint" params="name multiplier">
+      <joint name="${name}">
+        <param name="mimic">robotiq_85_left_knuckle_joint</param>
+        <param name="multiplier">${multiplier}</param>
+        <command_interface name="position"/>
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+    </xacro:macro>
+    <xacro:mimic_joint name="robotiq_85_right_knuckle_joint" multiplier="-1"/>
+    <xacro:mimic_joint name="robotiq_85_left_inner_knuckle_joint" multiplier="1"/>
+    <xacro:mimic_joint name="robotiq_85_right_inner_knuckle_joint" multiplier="-1"/>
+    <xacro:mimic_joint name="robotiq_85_left_finger_tip_joint" multiplier="-1"/>
+    <xacro:mimic_joint name="robotiq_85_right_finger_tip_joint" multiplier="1"/>
   </ros2_control>
 
   <!-- Load Plugin kết nối Gazebo với ROS 2 Controllers -->

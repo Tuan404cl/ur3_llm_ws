@@ -1,0 +1,12 @@
+# Kịch bản spawn ban đầu cho Gazebo (CHỈ dùng bởi launch để đặt vật vào mô phỏng).
+# Hệ thống lập kế hoạch KHÔNG đọc file này - mọi thông tin vị trí block đều
+# đến từ camera.
+#
+# Demo chính: zone_b đang bị blue_cube chiếm, zone_a bị yellow_cube chiếm,
+# zone_c trống. Tất cả các khối được đặt thẳng hàng (yaw = 0.0), khoảng cách an toàn >= 10cm.
+objects:
+  blue_cube:   [0.30, 0.00, 0.0]    # trong zone_b
+  yellow_cube: [0.30, -0.18, 0.0]   # trong zone_a
+  green_cube:  [0.22, -0.11, 0.0]   # trên bàn (thoáng, cách zone_a 10.6cm)
+  red_cube:    [0.22, 0.11, 0.0]    # trên bàn (thoáng, cách zone_c 10.6cm, yaw = 0.0)
+  purple_cube: [0.40, 0.10, 0.0]    # trên bàn (thoáng phía trước, yaw = 0.0)
